@@ -28,7 +28,7 @@
   - `PreToolUse` 决策 `deny` → 官方工具失败卡片（模型看到 `Error: <reason>`）。
 - **子代理**：默认触发，输入载荷携带 `agent_id` / `agent_type` / `delegation_depth`；可用 `subagents: false` 关闭；命令在触发者自己的沙箱上下文执行。
 - **热重载**：项目配置改动自动重新加载（`fs.watchFile`），无需重启。
-- **免重启热升级**：安装 `dsh-hot-installer` 后，`dsh plugin --profile web add <包>@<新版本>` 当场生效，无需重启。
+- **免重启热升级**：安装 [`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) 后，`dsh plugin --profile web add <包>@<新版本>` 当场生效，无需重启。
 - **交付形态**：profile bundle（`cordis.patch.yml` 自动插行），用 `dsh plugin --profile <p> add` 安装。
 
 ## 安装
@@ -175,7 +175,7 @@ dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
 ## 开发 / 验证
 
 - 纯函数单测：`node --test test/`
-- 热装验证（免重启）：`dsh-hot-installer` 已安装时，`dsh plugin --profile web add <包>@<新版本>` 当场生效。
+- 热装验证（免重启）：[`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) 已安装时，`dsh plugin --profile web add <包>@<新版本>` 当场生效。
 - 文件日志：`~/.dsh/logs/dsh-hooks/dsh-hooks.log`；最近记录：`GET /dsh-hooks/recent`。
 
 ## 明确不做（边界）

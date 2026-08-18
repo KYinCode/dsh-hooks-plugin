@@ -28,7 +28,7 @@ Claude Code style hooks for [DeepSeek Harness](https://github.com/deepseek-ai/de
   - A `PreToolUse` `deny` decision materializes the official tool failure card (model sees `Error: <reason>`).
 - **Subagents**: trigger by default, the input payload carries `agent_id` / `agent_type` / `delegation_depth`; disable per matcher with `subagents: false`; commands run in the triggerer's own sandbox context.
 - **Hot reload**: project config changes are re-read automatically (`fs.watchFile`), no restart.
-- **No-restart hot upgrade**: once `dsh-hot-installer` is installed, `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately — no restart needed.
+- **No-restart hot upgrade**: once [`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) is installed, `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately — no restart needed.
 - **Delivery**: profile bundle (`cordis.patch.yml` inserts the row), installed via `dsh plugin --profile <p> add`.
 
 ## Install
@@ -171,7 +171,7 @@ Compatibility with Claude Code stops at **"the config layout follows the CC shap
 ## Development / verification
 
 - Pure-function unit tests: `node --test test/`
-- Hot install without restart (when `dsh-hot-installer` is installed): `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately.
+- Hot install without restart (when [`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) is installed): `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately.
 - File log: `~/.dsh/logs/dsh-hooks/dsh-hooks.log`; recent records: `GET /dsh-hooks/recent`.
 
 ## Out of scope (boundary)
