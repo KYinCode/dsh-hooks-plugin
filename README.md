@@ -26,7 +26,7 @@ dsh plugin --profile web add dsh-hooks-plugin
 
 # 或本地打包
 npm pack
-dsh plugin --profile web add ./dsh-hooks-plugin-0.2.2.tgz
+dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
 ```
 
 安装后新会话自动生效；已有会话需要新建（`agent/created` 时按会话接线）。

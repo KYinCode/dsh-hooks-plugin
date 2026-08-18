@@ -26,7 +26,7 @@ dsh plugin --profile web add dsh-hooks-plugin
 
 # or from a local tarball
 npm pack
-dsh plugin --profile web add ./dsh-hooks-plugin-0.2.2.tgz
+dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
 ```
 
 New sessions pick it up automatically; existing sessions need to be recreated (wiring happens on `agent/created`).
