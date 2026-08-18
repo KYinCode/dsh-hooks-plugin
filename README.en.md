@@ -6,6 +6,18 @@ Claude Code style hooks for [DeepSeek Harness](https://github.com/deepseek-ai/de
 
 > The product is called **dsh-hooks**; the npm / GitHub package id is **`dsh-hooks-plugin`** (the `dsh-hooks` name was taken). The runtime API and log paths keep the `dsh-hooks` name: `~/.dsh/logs/dsh-hooks/dsh-hooks.log` and `GET /dsh-hooks/recent`.
 
+## Table of contents
+
+- [Features (v1)](#features-v1)
+- [Install](#install)
+- [Example](#example)
+  - [Hook field schema](#hook-field-schema)
+- [CC compatibility boundary](#cc-compatibility-boundary)
+- [stdin / stdout protocol (CC-compatible)](#stdin--stdout-protocol-cc-compatible)
+- [Development / verification](#development--verification)
+- [Out of scope (boundary)](#out-of-scope-boundary)
+- [License](#license)
+
 ## Features (v1)
 
 - **Four config layers**: global `~/.dsh/hooks.json` → preset `<preset-dir>/hooks.json` → project `<project>/.dsh/hooks.json` → project-local `.dsh/hooks.local.json`.
@@ -16,6 +28,7 @@ Claude Code style hooks for [DeepSeek Harness](https://github.com/deepseek-ai/de
   - A `PreToolUse` `deny` decision materializes the official tool failure card (model sees `Error: <reason>`).
 - **Subagents**: trigger by default, the input payload carries `agent_id` / `agent_type` / `delegation_depth`; disable per matcher with `subagents: false`; commands run in the triggerer's own sandbox context.
 - **Hot reload**: project config changes are re-read automatically (`fs.watchFile`), no restart.
+- **No-restart hot upgrade**: once `dsh-hot-installer` is installed, `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately — no restart needed.
 - **Delivery**: profile bundle (`cordis.patch.yml` inserts the row), installed via `dsh plugin --profile <p> add`.
 
 ## Install

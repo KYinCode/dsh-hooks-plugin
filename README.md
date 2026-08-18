@@ -6,6 +6,18 @@
 
 > 产品名是 **dsh-hooks**；npm / GitHub 包名是 **`dsh-hooks-plugin`**（`dsh-hooks` 已被占用）。运行时 API 与日志路径沿用 `dsh-hooks` 名：`~/.dsh/logs/dsh-hooks/dsh-hooks.log` 与 `GET /dsh-hooks/recent`（见下）。
 
+## 目录
+
+- [特性（v1）](#特性v1)
+- [安装](#安装)
+- [配置示例](#配置示例)
+  - [hook 字段 schema](#hook-字段-schema)
+- [CC 兼容边界](#cc-兼容边界)
+- [stdin / stdout 协议（CC 兼容）](#stdin--stdout-协议cc-兼容)
+- [开发 / 验证](#开发--验证)
+- [明确不做（边界）](#明确不做边界)
+- [License](#license)
+
 ## 特性（v1）
 
 - **四层配置**：全局 `~/.dsh/hooks.json` → 预设 `<preset-dir>/hooks.json` → 项目 `<项目根>/.dsh/hooks.json` → 项目本地 `.dsh/hooks.local.json`。
@@ -16,6 +28,7 @@
   - `PreToolUse` 决策 `deny` → 官方工具失败卡片（模型看到 `Error: <reason>`）。
 - **子代理**：默认触发，输入载荷携带 `agent_id` / `agent_type` / `delegation_depth`；可用 `subagents: false` 关闭；命令在触发者自己的沙箱上下文执行。
 - **热重载**：项目配置改动自动重新加载（`fs.watchFile`），无需重启。
+- **免重启热升级**：安装 `dsh-hot-installer` 后，`dsh plugin --profile web add <包>@<新版本>` 当场生效，无需重启。
 - **交付形态**：profile bundle（`cordis.patch.yml` 自动插行），用 `dsh plugin --profile <p> add` 安装。
 
 ## 安装
