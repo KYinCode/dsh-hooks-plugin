@@ -1,0 +1,18 @@
+# ── Third-party reference source (proprietary — never publish; neutral folder) ──
+reference/
+
+# ── Build artifacts ──
+*.tgz
+*.log
+
+# ── Runtime / local config (users create their own .dsh/) ──
+.dsh/
+node_modules/
+
+# ── OS noise ──
+.DS_Store
+Thumbs.db
+
+# ── Internal development handoff docs (local paths, not public-facing) ──
+docs/implementation-status.md
+docs/implementation-handoff.md
