@@ -16,3 +16,6 @@ Thumbs.db
 # ── Internal development handoff docs (local paths, not public-facing) ──
 docs/implementation-status.md
 docs/implementation-handoff.md
+
+# ── Personal Claude Code config/scripts (belongs to the user, not this plugin) ──
+cc-hooks/
