@@ -29,6 +29,8 @@
 - **子代理**：默认触发，输入载荷携带 `agent_id` / `agent_type` / `delegation_depth`；可用 `subagents: false` 关闭；命令在触发者自己的沙箱上下文执行。
 - **热重载**：项目配置改动自动重新加载（`fs.watchFile`），无需重启。
 - **免重启热升级**：安装 [`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) 后，`dsh plugin --profile web add <包>@<新版本>` 当场生效，无需重启。
+- **浮动控制台按会话隔离**：`shell.overlay` 上的 🔌 Hooks 浮动控制台只显示当前正在查看的会话的 hooks（含该会话子代理触发的记录，带 `subagent·dN` 角标）；切换会话即随之更新，头部显示 `会话·<标题>`。
+- **日志轮转**：`~/.dsh/logs/dsh-hooks/dsh-hooks.log` 超过 1 MiB（可用 `DSH_HOOKS_MAX_LOG_BYTES` 调整）自动滚动为 `.1` 并续写新文件，不会无限增长。
 - **交付形态**：profile bundle（`cordis.patch.yml` 自动插行），用 `dsh plugin --profile <p> add` 安装。
 
 ## 安装

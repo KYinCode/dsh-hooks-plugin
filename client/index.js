@@ -53,22 +53,52 @@ window.__ModuleLoader__.load({
       return raw.length > 34 ? raw.slice(0, 15) + '…' + raw.slice(-16) : raw
     }
 
+    function shortSessionId(id) {
+      const t = String(id || '').replace(/^session-/, '')
+      return t.slice(0, 8)
+    }
+
+    function shortTitle(t) {
+      const s = String(t || '')
+      return s.length > 14 ? s.slice(0, 12) + '…' : s
+    }
+
     function latestEntry(entries) {
       return entries.length ? entries[entries.length - 1] : undefined
     }
 
-    function HooksConsole() {
+    function HooksConsole(props) {
+      // shell.overlay standard prop: tracks the session currently being
+      // viewed. Each switch re-runs the poll for that session only, so the
+      // console no longer leaks hooks from previously viewed sessions.
+      const useSessions = props && props.useSessions
+      const sessionState = useSessions ? useSessions((s) => s) : undefined
+      const current = sessionState && sessionState.current
+      // Human-facing label for the current session: durable title, else the
+      // project basename, else the session id (displayTitle guarantees one).
+      const sessionTitle =
+        current && sessionState.byId && sessionState.byId[current]
+          ? sessionState.byId[current].displayTitle
+          : undefined
       const [entries, setEntries] = React.useState([])
       const [expanded, setExpanded] = React.useState(false)
       const [openId, setOpenId] = React.useState(undefined)
       const [pos, setPos] = React.useState({ x: 20, y: 120 })
       const drag = React.useRef(null)
 
+      // Session switch: drop stale rows so the next poll repopulates from the
+      // newly selected session only (otherwise previous-session rows linger).
+      React.useEffect(() => {
+        setEntries([])
+        setOpenId(undefined)
+      }, [current])
+
       React.useEffect(() => {
         let alive = true
         const tick = async () => {
           try {
-            const res = await fetch('/dsh-hooks/recent', { cache: 'no-store' })
+            const qs = current ? '?session=' + encodeURIComponent(current) : ''
+            const res = await fetch('/dsh-hooks/recent' + qs, { cache: 'no-store' })
             if (!res.ok) return
             const data = await res.json()
             if (!alive) return
@@ -84,7 +114,7 @@ window.__ModuleLoader__.load({
         tick()
         const iv = setInterval(tick, POLL_MS)
         return () => { alive = false; clearInterval(iv) }
-      }, [])
+      }, [current])
 
       const onHeaderPointerDown = (e) => {
         if (e.target.closest('button')) return
@@ -218,6 +248,11 @@ window.__ModuleLoader__.load({
 
       const headerChildren = [
         headerText(undefined, '🔌 Hooks'),
+        React.createElement(
+          'span',
+          { key: 'sess', style: { flex: '0 0 auto', color: COL_MUTED, fontSize: 10, lineHeight: 1.6, border: '1px solid rgba(139,148,158,0.35)', borderRadius: 3, padding: '0 4px', whiteSpace: 'nowrap' }, title: current ? ((sessionTitle || current) + ' (' + current + ')') : '未选择会话，显示全部' },
+          current ? '会话·' + (sessionTitle ? shortTitle(sessionTitle) : shortSessionId(current)) : '全部会话',
+        ),
         headerText(COL_MUTED, '· ' + entries.length + ' 条'),
         headerText(latestTone === 'bad' ? COL_BAD : latestTone === 'good' ? COL_GOOD : COL_MUTED, latest ? (latest.decision || '-') : 'idle'),
         denyCount > 0 ? headerText(COL_BAD, '· ' + denyCount + ' 拦截') : null,
@@ -270,7 +305,7 @@ window.__ModuleLoader__.load({
           })
         : null
 
-      const list = expanded ? React.createElement('div', { key: 'list', style: listStyle }, rows.length ? rows : React.createElement('div', { key: 'empty', style: emptyStyle }, '暂无记录')) : null
+      const list = expanded ? React.createElement('div', { key: 'list', style: listStyle }, rows.length ? rows : React.createElement('div', { key: 'empty', style: emptyStyle }, current ? '该会话暂无记录' : '暂无记录')) : null
 
       return React.createElement('div', { style: containerStyle }, header, list)
     }
