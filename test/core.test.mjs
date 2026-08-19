@@ -217,3 +217,32 @@ test('loadConfig: four-layer merge + cross-layer dedup (local wins)', async () =
     await fs.rm(tmp, { recursive: true, force: true })
   }
 })
+
+test('fileLog: rotates the log file past the byte threshold', async () => {
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const fs = await import('node:fs/promises')
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-hooks-log-'))
+  const origHome = process.env.DSH_HOME
+  const origMax = process.env.DSH_HOOKS_MAX_LOG_BYTES
+  try {
+    process.env.DSH_HOME = tmp
+    process.env.DSH_HOOKS_MAX_LOG_BYTES = '800'
+    // Fresh module instance so LOG_FILE/MAX_LOG_BYTES are captured against the
+    // temp DSH_HOME and the small threshold, isolated from the real log.
+    const mod = await import('../index.mjs?logrotate=' + Date.now())
+    const logFile = path.join(tmp, 'logs', 'dsh-hooks', 'dsh-hooks.log')
+    for (let i = 0; i < 80; i++) mod.fileLog('info', 'x'.repeat(120))
+    await mod.flushLogs()
+    const current = await fs.stat(logFile)
+    const backup = await fs.stat(logFile + '.1').then(() => true, () => false)
+    assert.equal(backup, true, 'rotated backup .1 should exist')
+    assert.ok(current.size < 1500, `current log not trimmed below threshold: ${current.size}`)
+  } finally {
+    if (origHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = origHome
+    if (origMax === undefined) delete process.env.DSH_HOOKS_MAX_LOG_BYTES
+    else process.env.DSH_HOOKS_MAX_LOG_BYTES = origMax
+    await fs.rm(tmp, { recursive: true, force: true })
+  }
+})

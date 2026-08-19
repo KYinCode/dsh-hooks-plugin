@@ -40,9 +40,8 @@
 // Logs: ctx.logger plus ~/.dsh/logs/dsh-hooks/dsh-hooks.log.
 
 import { watchFile, unwatchFile } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, appendFile, mkdir, rm, rename, stat } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
-import { appendFile, mkdir } from 'node:fs/promises'
 
 export const name = 'dsh-hooks'
 export const inject = ['webServer']
@@ -72,16 +71,46 @@ const CC_EVENTS = new Set([
 // logging
 // ---------------------------------------------------------------------------
 
-let logFileReady = null
-function fileLog(level, message) {
-  const line = `[${new Date().toISOString()}] [${level}] ${message}\n`
-  if (logFileReady === null) {
-    logFileReady = mkdir(dirname(LOG_FILE), { recursive: true })
-      .then(() => appendFile(LOG_FILE, line))
-      .catch(() => {})
-  } else {
-    logFileReady = logFileReady.then(() => appendFile(LOG_FILE, line)).catch(() => {})
+let logFileReady = Promise.resolve()
+let logDirReady = null
+
+/**
+ * Byte-threshold log rotation: once the active log reaches MAX_LOG_BYTES
+ * (default 1 MiB; override DSH_HOOKS_MAX_LOG_BYTES), the current file is
+ * renamed to `<log>.1` (replacing any previous backup) and a fresh file
+ * starts. Keeps the dev log from growing without bound.
+ */
+export const MAX_LOG_BYTES = Number(process.env.DSH_HOOKS_MAX_LOG_BYTES) || 1024 * 1024
+
+async function maybeRotateLog(file, maxBytes) {
+  try {
+    const s = await stat(file)
+    if (s.size < maxBytes) return
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') return // stat raced/unreadable — skip this round
+    return // no file yet
   }
+  const backup = file + '.1'
+  try { await rm(backup, { force: true }) } catch { /* best effort */ }
+  try { await rename(file, backup) } catch { /* best effort */ }
+}
+
+export function fileLog(level, message) {
+  const line = `[${new Date().toISOString()}] [${level}] ${message}\n`
+  if (logDirReady === null) logDirReady = mkdir(dirname(LOG_FILE), { recursive: true })
+  logFileReady = logFileReady
+    .then(async () => {
+      await logDirReady
+      await maybeRotateLog(LOG_FILE, MAX_LOG_BYTES)
+      await appendFile(LOG_FILE, line)
+    })
+    .catch(() => {})
+  return logFileReady
+}
+
+/** Await the file-log write queue (tests). */
+export function flushLogs() {
+  return logFileReady
 }
 
 function log(ctx, level, message) {
@@ -738,6 +767,32 @@ function hookDepth(agent) {
   return (h && h.delegationDepth) || 0
 }
 
+/**
+ * Top-most session that owns this hook, used to group records under a root
+ * session for the client console's per-session view. Walks the durable
+ * parent lineage (`session.header.parentSession`) up to at most 16 hops; a
+ * subagent's hook therefore belongs to its delegating session. Best effort —
+ * a broken lineage falls back to the triggering agent itself.
+ */
+function rootSessionOf(ctx, agent) {
+  if (!agent) return undefined
+  const agents = ctx && typeof ctx.get === 'function' ? ctx.get('agents') : undefined
+  let cur = agent
+  let root = String(agent.id)
+  let hops = 0
+  try {
+    while (cur && hops < 16) {
+      const header = cur.session && cur.session.header
+      const pid = header && header.parentSession
+      if (!pid) break
+      root = String(pid)
+      cur = agents && typeof agents.get === 'function' ? agents.get(pid) : undefined
+      hops += 1
+    }
+  } catch { /* best effort */ }
+  return root
+}
+
 function enqueue(state, fn) {
   state.queue = state.queue.then(fn).catch((error) => {
     if (!state.disposed) log(state.ctx, 'error', `agent ${state.agent.id}: ${String(error)}`)
@@ -848,6 +903,7 @@ function recordHook(state, agent, rec) {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     ts: Date.now(),
     session_id: String(agent.id),
+    root_session_id: rootSessionOf(state.ctx, agent),
     cwd: state.cwd,
     delegation_depth: depth,
     ...(depth > 0 ? { agent_id: String(agent.id), agent_type: agentType(agent) } : {}),
@@ -1105,8 +1161,16 @@ export function apply(ctx) {
       handler: async (req, res) => {
         const url = new URL(req.url ?? '/', 'http://dsh')
         if (url.pathname === '/dsh-hooks/recent' || url.pathname === '/dsh-hooks/recent.json') {
+          const session = url.searchParams.get('session') || null
+          let entries = recentRecordsSnapshot()
+          if (session && session !== 'all') {
+            // Grouped view: a subagent's record carries its delegating session
+            // in root_session_id, so the current session's own hooks plus all
+            // subagent-triggered ones come back together.
+            entries = entries.filter((e) => e.root_session_id === session)
+          }
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
-          res.end(JSON.stringify({ entries: recentRecordsSnapshot() }))
+          res.end(JSON.stringify({ entries, session }))
           return
         }
         if (url.pathname === '/dsh-hooks/health') {
