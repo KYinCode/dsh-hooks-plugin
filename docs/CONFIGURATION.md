@@ -44,6 +44,7 @@
   - [6.4 决策 JSON 模板](#64-决策-json-模板)
   - [6.5 完整脚本示例](#65-完整脚本示例)
   - [6.6 常见坑](#66-常见坑)
+  - [6.7 写一个在沙箱里跑得起来的决策脚本（Windows）](#67-写一个在沙箱里跑得起来的决策脚本windows)
 
 ---
 
@@ -198,7 +199,7 @@ v1 实际接线的 8 个事件（配置 key 写成下面左列的名字）：
 | 字段 | 说明 |
 | --- | --- |
 | `command`（必填） | 要执行的 shell 命令；**工作目录 = 会话 cwd**（[1.5](#15-相对路径怎么解析)） |
-| `shell` | `"bash"`（默认）\| `"powershell"` | **是去重键的一部分**；⚠️ v1 执行**不按它选解释器**——所有 `command` 一律走 dsh-shell（bash 执行器），写 `"powershell"` 不会真的用 pwsh 运行（见 [5](#5-诚实边界不支持项表)） |
+| `shell` | `"bash"`（默认）\| `"powershell"` | **是去重键的一部分**；⚠️ v1 **不按它选解释器**——`command` 由**宿主的 shell 执行**，解释器由宿主平台决定：本手册基线（Windows）实测是 **Windows PowerShell**，Unix 基线为 bash。**勿跨平台假定一致**：在 Windows 上请按 PowerShell 语法写 `command`（如用 `&` 调用算子、单引号包路径），用 `bash ./x.sh` 很可能解析失败或被沙箱拦（见 [5](#5-诚实边界不支持项表) #15/#16） |
 | `async` / `asyncRewake` | schema 保留；**v1 不实现后台执行**（见 [5](#5-诚实边界不支持项表)）；真正的 async 语义走 stdout 首行标记（[3.3](#33-async-首行标记)） |
 
 **`type: "http"` 专用**
@@ -314,7 +315,7 @@ dsh-hooks 解析 hook 的 **stdout 文本**：
 | 字段 | v1 消费行为（钉死的） |
 | --- | --- |
 | `hookSpecificOutput.permissionDecision` | 仅 **PreToolUse**：`"deny"` → 阻断（官方失败卡，模型看到 `Error: <permissionDecisionReason>`）；`"ask"` → 走 DSH 审批通道（策略决定弹不弹窗；`never` 下确定性拒绝）；`"allow"` → 显式放行 |
-| `hookSpecificOutput.permissionDecisionReason` | deny / ask 时的理由文本（deny 无理由时回退 `denied by hook <名字>`） |
+| `hookSpecificOutput.permissionDecisionReason` | deny / ask 时的理由文本（deny 无理由时回退 `denied by hook <名字>`）。**这段是写给模型看的**：deny 时它以 `Error: <reason>` 出现在工具失败卡里，模型据此调整下一步——请写**可行动的引导**（如「请改单个文件删除或先归档」），而不是只给人看的告警 |
 | `hookSpecificOutput.additionalContext` | **注入上下文**：作为一条 user 消息注入当前 agent（PreToolUse / PostToolUse / PostToolUseFailure / UserPromptSubmit / SessionStart 都会收集）——这是「故意喂养模型」的通道 |
 | `decision` | 顶层 `"block"` → 相当于 deny（配顶层 `reason`） |
 | `continue` | `false` → 在 **PreToolUse 决策路径**里等价 deny（配顶层 `reason`）；其他事件不消费 |
@@ -513,6 +514,7 @@ CC 例 → 迁移后：
 > 再加两个 CC 脚本生态的经典坑，迁移时顺手排掉（详见 [6.3](#63-四条钉死的事实)）：
 > - 脚本里**读顶层 `input.command`**（如 CC 生态的 safe-rm-guard）→ 在 DSH 里顶层没有 `command`，请改读 `tool_input.command`。
 > - 依赖**退出码门控**（非 0 = 失败、exit 2 = block）→ dsh-hooks 退出码不 gate，请改成打决策 JSON。
+> - 照抄 `bash ./hooks/x.sh` 直接拉起脚本 → 在 Windows 上 `command` 由 PowerShell 解释、且可能被沙箱拒拉外部 bash（[5](#5-诚实边界不支持项表) #15/#16）：决策脚本请放工作区内、进程内调用（`& '…/guard.ps1'` 或 node，见 [6.7](#67-写一个在沙箱里跑得起来的决策脚本windows)）。
 
 ---
 
@@ -536,9 +538,10 @@ CC 例 → 迁移后：
 | 12 | 卸载生命周期 / 悬空行提醒 / 设置页 UI | 无 | hooks.json 生命周期 = 它所在目录的生命周期（README「明确不做」同款） |
 | 13 | `CLAUDE_PROJECT_DIR` / `CLAUDE_PLUGIN_ROOT` 等 CC 环境变量 | 不注入 | 项目根已在输入 `cwd`；DSH 没有插件/技能目录可指 |
 | 14 | CC 插件体系（`${CLAUDE_PLUGIN_ROOT}` 替换、`CLAUDE_PLUGIN_OPTION_*`、`CLAUDE_ENV_FILE`） | 不实现 | 见 README「CC 兼容边界」 |
-| 15 | `shell: "powershell"`（换解释器） | **静默**：`shell` 只参与去重键，v1 执行一律走 dsh-shell（bash）执行器，不按它切换 | [2.4](#24-hook-字段-schema)；想用 pwsh 去匹配 `matcher:"pwsh"` 的 DSH 工具，hook 命令本身仍是 bash 解释器 |
+| 15 | `shell: "powershell"`（换解释器） | **静默**：`shell` 只参与去重键，不会真正切换解释器 | [2.4](#24-hook-字段-schema)；想用 pwsh 去匹配 `matcher:"pwsh"` 的 DSH 工具，`command` 的实际解释器仍由宿主平台决定（Windows 上就是 PowerShell） |
+| 16 | 决策 hook 想靠**拉起外部 exe**（`bash ./hooks/x.sh`、`C:\...\bash.exe` 等） | **静默 fail-open**：受限沙箱（如 Workspace Write）可能拒绝 spawn 工作区外的可执行文件（本机实测拉起 Git Bash 报 `Win32 error 5`），于是 hook 命令 status 1、**不产生任何决策 → 该 hook 等同放行**（最危险的「以为自己有守护」） | 决策脚本应放在**工作区内**、以**进程内**方式调用（PowerShell `& 'F:/工作区/guard.ps1'` 不新起进程；或 `node`），别依赖外部 bash；见 [6.7](#67-写一个在沙箱里跑得起来的决策脚本windows) |
 
-排查口诀：**没效果先查这四样** —— 事件名在不在 8 个里（表 #1）？是不是 `{"hooks":{}}` 信封（#2）？hook 类型是不是 command/http（#3/#4）？决策字段是不是放进了它该在的事件（[3.4](#34-决策只在触发它的那个事件里被解释)）？
+排查口诀：**没效果先查这五样** —— 事件名在不在 8 个里（表 #1）？是不是 `{"hooks":{}}` 信封（#2）？hook 类型是不是 command/http（#3/#4）？决策字段是不是放进了它该在的事件（[3.4](#34-决策只在触发它的那个事件里被解释)）？**决策 hook 是不是根本没跑起来**（在 `/dsh-hooks/recent` 看该 hook 的 `status` 是否 0；非 0 常因沙箱拒拉外部 exe，见 #16）？
 
 ---
 
@@ -613,6 +616,8 @@ hook 输入 JSON 顶层只有 `session_id` / `cwd` / `hook_event_name` / 事件�
     "permissionDecisionReason": "blocked by project policy"
 } }
 ```
+
+> `permissionDecisionReason` 会被拼成工具失败卡的 `Error: <reason>` **直接喂给模型**（[3.2](#32-stdout输出-json-全字段)）——写**可行动的引导**（如「请改单个文件删除或先归档」），不是写给人看的告警。
 
 **ask（走审批通道）**
 
@@ -693,4 +698,37 @@ process.stdin.on('end', () => {
 6. **Windows 上内联 `node -e` 引号转义崩掉** → 决策逻辑挪到脚本文件（④）。
 7. **超时**：hook 超时（默认 60s）按失败记录，**不 deny**——想要「超时即拦」请在脚本里自己打 decide JSON。
 8. **命令找不到 / shell 服务不可用** → 状态记失败、记录进日志，不会拦工具、不会弹给用户。
-9. **改配置没生效** → 先确认改的是**项目两层**（热重载）；全局/预设层需 touch 项目文件或热升级（[1.4](#14-热重载)）；再查 [5](#5-诚实边界不支持项表) 的四个静默点。
+9. **改配置没生效** → 先确认改的是**项目两层**（热重载）；全局/预设层需 touch 项目文件或热升级（[1.4](#14-热重载)）；再查 [5](#5-诚实边界不支持项表) 的五个静默点。
+
+### 6.7 写一个在沙箱里跑得起来的决策脚本（Windows）
+
+本手册基线（Windows）的两点现实（[5](#5-诚实边界不支持项表) #15/#16）：
+
+- `command` 由 **Windows PowerShell** 解释，不是 bash；
+- Workspace Write 等受限沙箱可能拒拉工作区外的外部 exe（`bash ./x.sh` 实测报 `Win32 error 5`）——决策 hook 一旦 command 失败就**静默放行**。
+
+所以「决策逻辑放脚本文件」（④）在 Windows 上这样落——**进程内执行，不 spawn 任何外部进程**：
+
+```powershell
+# <工作区>/safe-rm-guard.ps1
+param([switch]$SelfTest)
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+$raw = ''
+try { $raw = [Console]::In.ReadToEnd() } catch { }        # 读 dsh-hooks 的 stdin JSON
+$j = $null
+try { $j = $raw | ConvertFrom-Json } catch { exit 0 }     # 解析失败 = 放行
+if ($j.hook_event_name -ne 'PreToolUse') { exit 0 }       # 只有 PreToolUse 消费 deny
+$cmd = [string]$j.tool_input.command                      # 顶层没有 command（①②）
+# ……按你的策略判定，命中时只向 stdout 打一行决策 JSON：
+[Console]::Out.WriteLine('{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"blocked by policy"}}')
+exit 0
+```
+
+配置里一行（`&` 是 PowerShell 调用算子；路径用正斜杠免转义）：
+
+```json
+{ "PreToolUse": [ { "matcher": "bash|pwsh",
+  "hooks": [ { "type": "command", "command": "& 'F:/项目/工作区/safe-rm-guard.ps1'", "timeout": 10 } ] } ] }
+```
+
+写完后**第一时间确认它真的在被调用**：让会话跑一条无害命令，去 `/dsh-hooks/recent` 看该 hook 记录 `status=0`——否则它根本没跑起来，危险操作会静默放行（#16）。这不是测试方法论，只是"写完就该确保它能跑"的底线检查。

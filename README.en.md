@@ -33,19 +33,23 @@ Claude Code style hooks for [DeepSeek Harness](https://github.com/deepseek-ai/de
 - **Recent records persist**: every hook record is appended to `recent.jsonl` (capped at 200, tunable via `DSH_HOOKS_RECENT_MAX`) and re-seeded on hot upgrade/restart — the console keeps its recent history.
 - **Log rotation**: `~/.dsh/logs/dsh-hooks/dsh-hooks.log` rolls to `.1` beyond 1 MiB (tunable via `DSH_HOOKS_MAX_LOG_BYTES`) and keeps writing fresh — it never grows without bound.
 - **Delivery**: profile bundle (`cordis.patch.yml` inserts the row), installed via `dsh plugin --profile <p> add`.
+- **Manual shipped in the package**: `docs/CONFIGURATION.md` (config / protocol / boundaries) ships inside the npm tarball, so an installed agent can `read` it directly instead of reverse-engineering `index.mjs`.
+- **Authoring skill auto-registered**: `apply()` registers the bundled `skills/dsh-hooks-authoring` into the skill registry (global layer); any agent sees `dsh-hooks-authoring` in its `skill` catalog right after install. Loading it yields an index of the four pinned facts + config/decision JSON + Windows/sandbox caveats; depth lives in the shipped manual.
 
 ## Install
 
 ```sh
-# from npm (once published)
+# from npm (current latest 0.2.14)
 dsh plugin --profile web add dsh-hooks-plugin
 
 # or from a local tarball
 npm pack
-dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
+dsh plugin --profile web add ./dsh-hooks-plugin-0.2.14.tgz
 ```
 
 New sessions pick it up automatically; **existing live sessions do too** — the plugin's `apply()` walks the `agents` registry to re-wire already-live agents, so in-process hot install/upgrade needs no new session; continuing an old session after a process restart also re-wires on agent recreation (`agent/created`).
+
+> **For agents / hook authors**: run `skill dsh-hooks-authoring` first (auto-registered on install), and read `docs/CONFIGURATION.md` inside the installed package for depth — both ship with the package, no source-diving needed.
 
 ## Example
 

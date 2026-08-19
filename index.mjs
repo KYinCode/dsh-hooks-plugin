@@ -39,7 +39,7 @@
 //
 // Logs: ctx.logger plus ~/.dsh/logs/dsh-hooks/dsh-hooks.log.
 
-import { watchFile, unwatchFile, mkdirSync, appendFileSync } from 'node:fs'
+import { watchFile, unwatchFile, mkdirSync, appendFileSync, readFileSync } from 'node:fs'
 import { readFile, writeFile, appendFile, mkdir, rm, rename, stat } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
 
@@ -1157,6 +1157,22 @@ function createTextUserMessage(text, plugin) {
 // plugin
 // ---------------------------------------------------------------------------
 
+// Parse a skill doc's `---\nkey: value\n---\n<body>` frontmatter. Returns
+// { meta, body } or null when the doc has no valid frontmatter block.
+function parseSkillFrontmatter(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text)
+  if (!m) return null
+  const meta = {}
+  for (const line of m[1].split(/\r?\n/)) {
+    const i = line.indexOf(':')
+    if (i === -1) continue
+    const key = line.slice(0, i).trim()
+    const value = line.slice(i + 1).trim()
+    if (key) meta[key] = value
+  }
+  return { meta, body: text.slice(m[0].length) }
+}
+
 export function apply(ctx) {
   ctx.on('agent/created', (payload) => {
     const agent = payload && payload.agent
@@ -1282,6 +1298,36 @@ export function apply(ctx) {
         } catch (error) {
           log(ctx, 'error', `agent ${agent.id}: apply re-wire failure: ${String(error)}`)
         }
+      }
+    }
+  }
+
+  // Ship the bundled authoring skill: register it into the host `skills`
+  // registry (global layer) so every agent's `skill` tool / catalog sees it
+  // right after install — the agent can then author hooks without having to
+  // reverse-engineer index.mjs. The service is optional: if it is absent
+  // (older host) or the SKILL.md is missing, degrade to a warn; never throw.
+  {
+    const skills = ctx.get('skills')
+    if (skills && typeof skills.register === 'function') {
+      try {
+        const doc = parseSkillFrontmatter(readFileSync(new URL('./skills/dsh-hooks-authoring/SKILL.md', import.meta.url), 'utf8'))
+        const skillName = doc && doc.meta && doc.meta.name
+        if (skillName && doc.body && doc.body.length > 0) {
+          const dispose = skills.register({
+            name: skillName,
+            description: doc.meta.description || 'Author dsh-hooks hook scripts for this deployment.',
+            whenToUse: 'When writing or debugging dsh-hooks hook scripts in a session where dsh-hooks-plugin is installed.',
+            content: doc.body,
+            source: `package:${skillName}`,
+          })
+          ctx.effect(() => dispose)
+          log(ctx, 'info', `bundled skill "${skillName}" registered`)
+        } else {
+          log(ctx, 'warn', 'bundled authoring skill has no valid frontmatter/body — registration skipped')
+        }
+      } catch (error) {
+        log(ctx, 'warn', `bundled skill registration skipped: ${String(error)}`)
       }
     }
   }

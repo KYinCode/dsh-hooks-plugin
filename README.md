@@ -33,19 +33,23 @@
 - **最近记录持久化**：每条 hook 记录写入 `recent.jsonl`（限 200 条，`DSH_HOOKS_RECENT_MAX` 可调），插件热升级/进程重启后自动回填——控制台不丢最近历史。
 - **日志轮转**：`~/.dsh/logs/dsh-hooks/dsh-hooks.log` 超过 1 MiB（可用 `DSH_HOOKS_MAX_LOG_BYTES` 调整）自动滚动为 `.1` 并续写新文件，不会无限增长。
 - **交付形态**：profile bundle（`cordis.patch.yml` 自动插行），用 `dsh plugin --profile <p> add` 安装。
+- **随包自带手册**：`docs/CONFIGURATION.md`（配置 / 协议 / 边界全讲清）随 npm 包装入——装完的 agent 可直接 `read` 它，不必翻源码猜协议。
+- **自动注册作者技能**：`apply()` 把包内 `skills/dsh-hooks-authoring` 注册进技能注册表（global 层），任意 agent 装完即在其 `skill` 目录看到 `dsh-hooks-authoring`；加载即得「四条钉死事实 + 配置/决策 JSON + Windows/沙箱边界」索引，深度问题读随包手册。
 
 ## 安装
 
 ```sh
-# 从 npm 安装（发布后）
+# 从 npm 安装（当前 latest 0.2.14）
 dsh plugin --profile web add dsh-hooks-plugin
 
 # 或本地打包
 npm pack
-dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
+dsh plugin --profile web add ./dsh-hooks-plugin-0.2.14.tgz
 ```
 
 安装后新会话自动生效；**已有（存活）会话也会生效**——插件 `apply()` 会遍历 `agents` 注册表为已存活会话补线，因此同进程热装/热升级后无需新建会话；进程重启后继续旧会话同样随 agent 重建自动重新接线（`agent/created`）。已断开的会话不存在的场合只有一种：进程重启后未重新打开旧会话。
+
+> **给 agent / 写 hook 的人**：装完先 `skill dsh-hooks-authoring`（自动注册，加载即得作者指南），深度看安装包内 `docs/CONFIGURATION.md`——两者都随包分发，不用碰源码。
 
 ## 配置示例
 

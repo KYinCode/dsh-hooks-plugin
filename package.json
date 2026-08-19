@@ -1,6 +1,6 @@
 {
   "name": "dsh-hooks-plugin",
-  "version": "0.2.11",
+  "version": "0.2.15",
   "description": "Claude Code style hooks for DeepSeek Harness: run shell commands on agent/tool lifecycle events from .dsh/hooks.json (CC-compatible JSON shape).",
   "keywords": [
     "deepseek-harness",
@@ -26,6 +26,8 @@
     "index.mjs",
     "client/",
     "cordis.patch.yml",
+    "skills/",
+    "docs/CONFIGURATION.md",
     "README.md",
     "README.en.md"
   ],

@@ -61,7 +61,9 @@ if ($CheckOnly) {
 Write-Host '==> [4/8] write version back to package.json'
 $raw = Get-Content (Join-Path $root 'package.json') -Raw
 $raw = $raw -replace '"version":\s*"[^"]+"', ('"version": "{0}"' -f $Version)
-Set-Content -Path (Join-Path $root 'package.json') -Value $raw -Encoding utf8 -NoNewline
+# Windows PowerShell 5.1 的 Set-Content -Encoding utf8 会写 BOM，导致 hot-installer
+# 的严格 JSON.parse 失败并回滚（0.2.13 事故）。这里用 UTF8 无 BOM 写。
+[System.IO.File]::WriteAllText((Join-Path $root 'package.json'), $raw, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host '==> [5/8] npm publish'
 npm publish
