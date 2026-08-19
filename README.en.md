@@ -29,7 +29,8 @@ Claude Code style hooks for [DeepSeek Harness](https://github.com/deepseek-ai/de
 - **Subagents**: trigger by default, the input payload carries `agent_id` / `agent_type` / `delegation_depth`; disable per matcher with `subagents: false`; commands run in the triggerer's own sandbox context.
 - **Hot reload**: project config changes are re-read automatically (`fs.watchFile`), no restart.
 - **No-restart hot upgrade**: once [`dsh-hot-installer`](https://github.com/KYinCode/dsh-hot-installer) is installed, `dsh plugin --profile web add <pkg>@<new-version>` takes effect immediately — no restart needed.
-- **Session-scoped floating console**: the 🔌 Hooks console on `shell.overlay` shows only the currently viewed session's hooks (including those triggered by its subagents, marked with a `subagent·dN` badge); switching sessions follows automatically and the header shows `会话·<title>`.
+- **Session-scoped floating console**: the 🔌 Hooks console on `shell.overlay` shows only the currently viewed session's hooks (including those triggered by its subagents, marked with a `subagent·dN` badge, and the triggering tool name inline); switching sessions follows automatically and the header shows `会话·<title>`.
+- **Recent records persist**: every hook record is appended to `recent.jsonl` (capped at 200, tunable via `DSH_HOOKS_RECENT_MAX`) and re-seeded on hot upgrade/restart — the console keeps its recent history.
 - **Log rotation**: `~/.dsh/logs/dsh-hooks/dsh-hooks.log` rolls to `.1` beyond 1 MiB (tunable via `DSH_HOOKS_MAX_LOG_BYTES`) and keeps writing fresh — it never grows without bound.
 - **Delivery**: profile bundle (`cordis.patch.yml` inserts the row), installed via `dsh plugin --profile <p> add`.
 

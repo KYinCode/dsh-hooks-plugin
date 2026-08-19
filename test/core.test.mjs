@@ -246,3 +246,36 @@ test('fileLog: rotates the log file past the byte threshold', async () => {
     await fs.rm(tmp, { recursive: true, force: true })
   }
 })
+
+test('recent persists to recent.jsonl and re-seeds after a reload', async () => {
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const fs = await import('node:fs/promises')
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-hooks-recent-'))
+  const origHome = process.env.DSH_HOME
+  const origMax = process.env.DSH_HOOKS_RECENT_MAX
+  try {
+    process.env.DSH_HOME = tmp
+    process.env.DSH_HOOKS_RECENT_MAX = '5'
+    const mod = await import('../index.mjs?recent1=' + Date.now())
+    for (let i = 0; i < 12; i++) mod.appendRecentEntry({ id: 'r' + i, ts: i, session_id: 's', event: 'Test', name: 'n', tool_name: 'read' })
+    // Memory keeps all 12 (under MAX_RECENT 100); each is written to disk.
+    assert.equal(mod.recentRecordsSnapshot().length, 12)
+    // Simulate a hot reload: fresh module instance (empty memory), then re-seed
+    // from the JSONL tail, which should also trim the file to the cap of 5.
+    const mod2 = await import('../index.mjs?recent2=' + Date.now())
+    assert.equal(mod2.recentRecordsSnapshot().length, 0)
+    await mod2.seedRecentFromDisk()
+    const after = mod2.recentRecordsSnapshot()
+    assert.equal(after.length, 5, 're-seeded to the disk cap (RECENT_PERSIST_MAX)')
+    assert.equal(after[0].id, 'r7', 'oldest tail entry retained')
+    assert.equal(after[after.length - 1].id, 'r11', 'newest entry retained')
+    assert.equal(after[after.length - 1].tool_name, 'read', 'extra fields survive the round-trip')
+  } finally {
+    if (origHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = origHome
+    if (origMax === undefined) delete process.env.DSH_HOOKS_RECENT_MAX
+    else process.env.DSH_HOOKS_RECENT_MAX = origMax
+    await fs.rm(tmp, { recursive: true, force: true })
+  }
+})

@@ -281,6 +281,9 @@ window.__ModuleLoader__.load({
               React.createElement('span', { key: 'ic', style: { color: iconColor, flex: '0 0 auto', width: 16, textAlign: 'center' } }, icon),
               React.createElement('span', { key: 'ev', style: eventStyle }, rec.event || ''),
               React.createElement('span', { key: 'nm', style: nameStyle }, displayName(rec)),
+              rec.tool_name
+                ? React.createElement('span', { key: 'tool', style: { flex: '0 0 auto', color: COL_MUTED, fontSize: 10, lineHeight: 1.6, background: 'rgba(139,148,158,0.12)', borderRadius: 3, padding: '0 4px', whiteSpace: 'nowrap' } }, rec.tool_name)
+                : null,
               subagentBadge(rec),
               rec.elapsedMs != null ? React.createElement('span', { key: 'tm', style: timeStyle }, rec.elapsedMs + 'ms') : null,
               React.createElement(

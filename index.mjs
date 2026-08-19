@@ -39,8 +39,8 @@
 //
 // Logs: ctx.logger plus ~/.dsh/logs/dsh-hooks/dsh-hooks.log.
 
-import { watchFile, unwatchFile } from 'node:fs'
-import { readFile, appendFile, mkdir, rm, rename, stat } from 'node:fs/promises'
+import { watchFile, unwatchFile, mkdirSync, appendFileSync } from 'node:fs'
+import { readFile, writeFile, appendFile, mkdir, rm, rename, stat } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
 
 export const name = 'dsh-hooks'
@@ -654,6 +654,7 @@ async function executeHooks(ctx, state, agent, hookEvent, hookInput, signal) {
       event: hookEvent,
       name: hookNameOf(hook),
       type: hook.type,
+      ...(hookInput.tool_name ? { tool_name: hookInput.tool_name } : {}),
       status: outcome.status,
       timedOut: outcome.timedOut === true,
       aborted: outcome.aborted === true,
@@ -893,10 +894,83 @@ function cleanupState(ctx, state, reason) {
 }
 
 // ---------------------------------------------------------------------------
-// record store: Hook host-side memory (cap 100) + file history
+// record store: Hook host-side memory (cap 100) + JSONL persistence
 // ---------------------------------------------------------------------------
+//
+// The recent view has two layers:
+//  - memory (`recentRecords`, cap MAX_RECENT) is the fast read path the
+//    /dsh-hooks/recent endpoint and the client console poll;
+//  - a JSONL file (`RECENT_FILE`, capped at RECENT_PERSIST_MAX lines) records
+//    every entry so that a bundle hot-reload (which re-evaluates the module and
+//    wipes the in-memory array) can re-seed the last entries — the console
+//    keeps showing recent history across hot upgrades instead of dropping to 0.
 
-const recentRecords = [] // newest last, cap 100
+const RECENT_FILE = join(DSH_HOME, 'logs', 'dsh-hooks', 'recent.jsonl')
+const MAX_RECENT = 100
+/** Disk retention for recent.jsonl (override DSH_HOOKS_RECENT_MAX). */
+export const RECENT_PERSIST_MAX = Number(process.env.DSH_HOOKS_RECENT_MAX) || 200
+
+const recentRecords = [] // newest last, cap MAX_RECENT
+let recentDirReady = false
+let persistCount = 0
+
+function ensureRecentDir() {
+  if (recentDirReady) return
+  try {
+    mkdirSync(dirname(RECENT_FILE), { recursive: true })
+    recentDirReady = true
+  } catch { /* best effort */ }
+}
+
+/** Append one entry to recent.jsonl (synchronous so it survives a reload). */
+function persistEntry(entry) {
+  ensureRecentDir()
+  try {
+    appendFileSync(RECENT_FILE, JSON.stringify(entry) + '\n')
+  } catch { /* best effort */ }
+  if (++persistCount % 64 === 0) trimRecentFile().catch(() => {})
+}
+
+/** Trim recent.jsonl back to the last RECENT_PERSIST_MAX lines. */
+async function trimRecentFile() {
+  let text
+  try { text = await readFile(RECENT_FILE, 'utf8') } catch { return }
+  const lines = text.split('\n').filter((l) => l.trim().length > 0)
+  if (lines.length <= RECENT_PERSIST_MAX) return
+  try { await writeFile(RECENT_FILE, lines.slice(lines.length - RECENT_PERSIST_MAX).join('\n') + '\n') } catch { /* best effort */ }
+}
+
+/**
+ * Rebuild the in-memory recent list from the JSONL tail. Called on plugin
+ * apply so a hot reload re-seeds everything that survived on disk. Also
+ * rewrites the file when it outgrew RECENT_PERSIST_MAX.
+ */
+export async function seedRecentFromDisk() {
+  ensureRecentDir()
+  let text
+  try { text = await readFile(RECENT_FILE, 'utf8') } catch { return }
+  const entries = []
+  for (const line of text.split('\n')) {
+    const l = line.trim()
+    if (!l) continue
+    try { entries.push(JSON.parse(l)) } catch { /* skip corrupt lines */ }
+  }
+  const tail = entries.slice(-RECENT_PERSIST_MAX)
+  recentRecords.length = 0
+  recentRecords.push(...tail)
+  if (recentRecords.length > MAX_RECENT) recentRecords.splice(0, recentRecords.length - MAX_RECENT)
+  if (entries.length !== tail.length) {
+    try { await writeFile(RECENT_FILE, tail.map((e) => JSON.stringify(e)).join('\n') + '\n') } catch { /* best effort */ }
+  }
+}
+
+/** Push into the memory list (capped) and persist the entry (exported for tests). */
+export function appendRecentEntry(entry) {
+  recentRecords.push(entry)
+  if (recentRecords.length > MAX_RECENT) recentRecords.splice(0, recentRecords.length - MAX_RECENT)
+  persistEntry(entry)
+}
+
 function recordHook(state, agent, rec) {
   const depth = hookDepth(agent)
   const entry = {
@@ -909,11 +983,9 @@ function recordHook(state, agent, rec) {
     ...(depth > 0 ? { agent_id: String(agent.id), agent_type: agentType(agent) } : {}),
     ...rec,
   }
-  recentRecords.push(entry)
-  if (recentRecords.length > 100) recentRecords.splice(0, recentRecords.length - 100)
+  appendRecentEntry(entry)
   // file log line: tail carries the identity context (project cwd, session id,
-  // delegation depth, subagent agent_type) that debug and grep rely on; the
-  // recent memory record above already carries the same leaf fields as JSON.
+  // delegation depth, subagent agent_type) that debug and grep rely on.
   const ctxParts = [
     `cwd=${entry.cwd ?? ''}`,
     `sid=${entry.session_id ?? ''}`,
@@ -925,7 +997,7 @@ function recordHook(state, agent, rec) {
   } catch { /* best effort */ }
 }
 
-function recentRecordsSnapshot() {
+export function recentRecordsSnapshot() {
   return recentRecords.slice()
 }
 
@@ -1213,6 +1285,11 @@ export function apply(ctx) {
       }
     }
   }
+
+  // Re-seed the recent view from the JSONL tail so a hot reload (which
+  // re-evaluates this module and wipes the in-memory array) keeps the most
+  // recent records visible instead of resetting to zero.
+  seedRecentFromDisk().catch(() => {})
 
   log(ctx, 'info', 'plugin active (v1) — per-agent hooks, CC protocol')
 }
