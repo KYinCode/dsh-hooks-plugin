@@ -42,7 +42,7 @@ npm pack
 dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
 ```
 
-New sessions pick it up automatically; existing sessions need to be recreated (wiring happens on `agent/created`).
+New sessions pick it up automatically; **existing live sessions do too** — the plugin's `apply()` walks the `agents` registry to re-wire already-live agents, so in-process hot install/upgrade needs no new session; continuing an old session after a process restart also re-wires on agent recreation (`agent/created`).
 
 ## Example
 

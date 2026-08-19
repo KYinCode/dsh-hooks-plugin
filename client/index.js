@@ -162,6 +162,25 @@ window.__ModuleLoader__.load({
       const eventStyle = { width: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '0 0 auto', color: COL_MUTED }
       const nameStyle = { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
       const timeStyle = { flex: '0 0 auto', color: COL_MUTED, fontWeight: 600 }
+      // Subagent badge: hints who triggered the hook. `rec.delegation_depth`
+      // and `rec.agent_type`/`rec.agent_id` are set by the host record for
+      // subagent-triggered hooks (depth > 0); top-level entries render no
+      // badge so the console reads like before for the common case.
+      const badgeStyle = {
+        flex: '0 0 auto',
+        fontSize: 10,
+        lineHeight: 1.6,
+        color: '#a8b3bf',
+        background: 'rgba(139,148,158,0.16)',
+        border: '1px solid rgba(139,148,158,0.35)',
+        borderRadius: 3,
+        padding: '0 4px',
+        whiteSpace: 'nowrap',
+      }
+      const subagentBadge = (rec) =>
+        rec.delegation_depth > 0
+          ? React.createElement('span', { key: 'sub', style: badgeStyle, title: 'agent_id=' + (rec.agent_id || '') }, (rec.agent_type || 'subagent') + '·d' + rec.delegation_depth)
+          : null
       const toggleStyle = { flex: '0 0 auto', marginLeft: 'auto', background: 'transparent', color: COL_TEXT, border: 'none', cursor: 'pointer', padding: '1px 4px' }
       const stdoutStyle = {
         margin: 0,
@@ -227,6 +246,7 @@ window.__ModuleLoader__.load({
               React.createElement('span', { key: 'ic', style: { color: iconColor, flex: '0 0 auto', width: 16, textAlign: 'center' } }, icon),
               React.createElement('span', { key: 'ev', style: eventStyle }, rec.event || ''),
               React.createElement('span', { key: 'nm', style: nameStyle }, displayName(rec)),
+              subagentBadge(rec),
               rec.elapsedMs != null ? React.createElement('span', { key: 'tm', style: timeStyle }, rec.elapsedMs + 'ms') : null,
               React.createElement(
                 'button',

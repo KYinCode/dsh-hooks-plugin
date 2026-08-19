@@ -855,8 +855,17 @@ function recordHook(state, agent, rec) {
   }
   recentRecords.push(entry)
   if (recentRecords.length > 100) recentRecords.splice(0, recentRecords.length - 100)
+  // file log line: tail carries the identity context (project cwd, session id,
+  // delegation depth, subagent agent_type) that debug and grep rely on; the
+  // recent memory record above already carries the same leaf fields as JSON.
+  const ctxParts = [
+    `cwd=${entry.cwd ?? ''}`,
+    `sid=${entry.session_id ?? ''}`,
+    `depth=${entry.delegation_depth ?? 0}`,
+  ]
+  if ((entry.delegation_depth ?? 0) > 0 && entry.agent_type) ctxParts.push(`agent=${entry.agent_id ?? ''} type=${entry.agent_type}`)
   try {
-    fileLog('info', `hook ${entry.event} ${entry.name} -> ${entry.status} (${entry.elapsedMs ?? 0}ms) decision=${entry.decision ?? '-'}${entry.reason ? ` reason="${entry.reason}"` : ''}`)
+    fileLog('info', `hook ${entry.event} ${entry.name} -> ${entry.status} (${entry.elapsedMs ?? 0}ms) decision=${entry.decision ?? '-'}${entry.reason ? ` reason="${entry.reason}"` : ''} ` + ctxParts.join(' '))
   } catch { /* best effort */ }
 }
 
@@ -1119,6 +1128,27 @@ export function apply(ctx) {
       cleanupState(ctx, state, 'plugin reloaded')
     }
   })
+
+  // Re-wire agents that were already live before THIS plugin instance applied.
+  // A same-process hot reload of the bundle unmounts the old fiber (cleaning
+  // every controller) and re-applies without emitting `agent/created` for
+  // existing agents, so without this pass live sessions silently lose their
+  // hooks until they are recreated. Idempotent: wireAgent only registers a
+  // controller for agents not already in agentStates; agents created after
+  // this point are caught by the `agent/created` listener above.
+  {
+    const agents = ctx.get('agents')
+    if (agents && typeof agents.list === 'function') {
+      for (const agent of agents.list()) {
+        if (!agent || agentStates.has(agent.id)) continue
+        try {
+          wireAgent(ctx, agent)
+        } catch (error) {
+          log(ctx, 'error', `agent ${agent.id}: apply re-wire failure: ${String(error)}`)
+        }
+      }
+    }
+  }
 
   log(ctx, 'info', 'plugin active (v1) — per-agent hooks, CC protocol')
 }

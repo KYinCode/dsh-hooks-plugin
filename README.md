@@ -42,7 +42,7 @@ npm pack
 dsh plugin --profile web add ./dsh-hooks-plugin-0.2.3.tgz
 ```
 
-安装后新会话自动生效；已有会话需要新建（`agent/created` 时按会话接线）。
+安装后新会话自动生效；**已有（存活）会话也会生效**——插件 `apply()` 会遍历 `agents` 注册表为已存活会话补线，因此同进程热装/热升级后无需新建会话；进程重启后继续旧会话同样随 agent 重建自动重新接线（`agent/created`）。已断开的会话不存在的场合只有一种：进程重启后未重新打开旧会话。
 
 ## 配置示例
 
